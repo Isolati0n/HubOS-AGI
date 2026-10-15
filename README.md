@@ -9,7 +9,7 @@ The real build is a different repository: https://github.com/Isolati0n/HubOS. It
 ## What is here
 
 - `docs/vision/` : one document per machine, in this order: hub, NAS and backup NAS, the three one-app nodes (browser, editor, music), VM host, gaming box.
-- `docs/vision/hub.md` : the hub's one-page target list. Approved by the owner on 2026-10-14. The hub design comes after it.
+- `docs/vision/hub.md` : the hub's target list (approved by the owner on 2026-10-14) and its design, which is being written part by part.
 - `CLAUDE.md` : the rules every bot session follows in this repository.
 
 ## How to read the documents
