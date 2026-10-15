@@ -63,7 +63,12 @@ Scale
 
 ## Design (in progress)
 
-Written so far: 3.1 the compositor and 3.2 the picture path. Not written yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance. Each part is added after the owner has answered its questions.
+Written so far: 3.0 scope, 3.1 the compositor and 3.2 the picture path. Not written yet: the base system (boot, kernel, drivers, init, file system), what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance. Each part is added after the owner has answered its questions.
+
+### 3.0 Scope (owner decision, 2026-10-14)
+- Every layer of the hub's software is from scratch and purpose-built for this hub, written by AGI: the kernel, the drivers, the init system, the file system, the compositor (3.1), the display protocol (3.2) and the programs on top. Nothing is kept from the real build's choices (the upstream Linux kernel, the s6 init) unless a later section says so and gives the reason.
+- What stays fixed: the hardware and all vendor firmware (section 4). The from-scratch kernel and drivers must run on the real parts and load vendor firmware as it is.
+- The parts list is not chosen until December, so which drivers are needed is UNKNOWN until then.
 
 ### 3.1 The compositor (owner decision, 2026-10-14)
 - driftwm is the base. AGI rebuilds it for this hub's features and optimizations, and makes it perfect and high-performance. In Wayland the compositor and the window manager are one program.
@@ -99,7 +104,7 @@ What the real build measured about pausing (TESTED there, at 1280x720 on loopbac
 - The project file calls the hub's GPU "discrete AMD"; HUB-OS.md on main does not say discrete. Check in December. A discrete GPU adds a real PCIe link and its own memory.
 - Whether the compositor's zoom should magnify: UNKNOWN until text on the projector can be judged (December).
 - No clock-serving target: the owner decided against it. Phone page and shared phone sessions: dropped from this track.
-- Not designed yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance.
+- Not designed yet: the base system (boot, kernel, drivers, init, file system), what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance.
 
 ## 6. Check plan (compositor and picture path)
 - Per-window byte counters on the hub in a full-load run (20 windows changing, the rest hidden): incoming traffic at most 1.1 x the screen's pixels per second (target 25).
@@ -111,3 +116,4 @@ What the real build measured about pausing (TESTED there, at 1280x720 on loopbac
 - The real build never pauses or scales windows (owner decision 2026-10-05, because the network is free). This design does both, because the limit that matters is the hub's memory, not the network. The scaled-copy request is new and is not in the real build's protocol.
 - The real build patches a young compositor and plans restart-and-restore for its crashes (SOURCE: HUB-OS.md). This design assumes a rebuilt, defect-free compositor, and still keeps recovery for hardware events.
 - The real build asks every window for full-size pictures all the time. This design asks only for what is shown.
+- The real build keeps the upstream Linux kernel, built for the hub, and uses s6 as its init (SOURCE: HUB-OS.md "Core principles" and its change log entry of 2026-10-13, read 2026-10-14). This design writes the kernel, drivers, init and file system from scratch for the hub (owner decision, 2026-10-14). The details come with the base-system design.

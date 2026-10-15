@@ -6,7 +6,7 @@ This is the theorycraft track "Hub OS AGI". Everything in it is labelled **AGI p
 
 - The source of truth for this track is `HUB-OS-AGI.md` in the owner's claude.ai project "Hub OS - AGI". This file is a copy of what the bot needs. If they disagree, the project file wins, and the manager (the project chat) keeps this copy in sync.
 - The real build is https://github.com/Isolati0n/HubOS. For facts about the real build, `HUB-OS.md` on `main` there wins. Read it only when a prompt tells you to.
-- **The real build's `CLAUDE.md` and its Never-do list do not apply here.** In this track a new display protocol, a from-scratch init or a custom compositor is allowed to be proposed.
+- **The real build's `CLAUDE.md` and its Never-do list do not apply here.** In this track the kernel, drivers, init, file system, compositor and display protocol are all from scratch and purpose-built for each machine (owner decision, 2026-10-14). Hardware and vendor firmware stay fixed.
 
 ## The premise
 
