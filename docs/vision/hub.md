@@ -1,6 +1,6 @@
 # Hub: target list and design (design in progress)
 
-AGI premise, not buildable today. Machine: hub. Date: 2026-10-14. Status: targets 1 to 24 approved by the owner on 2026-10-14; target 25 added and approved the same day; design in progress (sections 3.1 and 3.2 written, the rest not yet). Track: theorycraft (project file HUB-OS-AGI.md). The real build's source of truth stays HUB-OS.md on main; nothing here changes it.
+AGI premise, not buildable today. Machine: hub. Date: 2026-10-14. Status: targets 1 to 24 approved by the owner on 2026-10-14; target 25 added and approved the same day; design in progress (sections 3.0 to 3.4 written, the rest not yet). Track: theorycraft (project file HUB-OS-AGI.md). The real build's source of truth stays HUB-OS.md on main; nothing here changes it.
 
 Labels: TESTED = a command and its output. SOURCE = a link or file and date. BELIEVED = not checked. UNKNOWN = not established. Almost every number below is a target, not a measurement.
 
@@ -63,7 +63,7 @@ Scale
 
 ## Design (in progress)
 
-Written so far: 3.0 scope, 3.1 the compositor and 3.2 the picture path. Not written yet: the base system (boot, kernel, drivers, init, file system), what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance. Each part is added after the owner has answered its questions.
+Written so far: 3.0 scope, 3.1 the compositor, 3.2 the picture path, 3.3 the languages and 3.4 the base system (kernel, storage, supervisor). Not written yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance. Drivers are not designed (owner decision, 2026-10-15): they depend on parts bought in December. Each part is added after the owner has answered its questions.
 
 ### 3.0 Scope (owner decision, 2026-10-14)
 - Every layer of the hub's software is from scratch and purpose-built for this hub, written by AGI: the kernel, the drivers, the init system, the file system, the compositor (3.1), the display protocol (3.2) and the programs on top. Nothing is kept from the real build's choices (the upstream Linux kernel, the s6 init) unless a later section says so and gives the reason.
@@ -89,11 +89,58 @@ Rule: the hub only receives the pixels it will show, at the size it shows them.
 
 What the real build measured about pausing (TESTED there, at 1280x720 on loopback, by a helper agent, not by the author of this document; SOURCE: docs/proposals/remote-display-lod.md sections 5.1 and 5.4, Isolati0n/HubOS at ab1047a, read 2026-10-14): with no requests the node sent 0 bytes; after 10 s paused the first picture came within 2 to 30 ms, as one picture holding the accumulated change, not a backlog. Pausing did not reduce the node's own work (it used 25 to 32% of a core either way).
 
+### 3.3 The languages (owner decisions, 2026-10-15)
+The owner wants the AGI to design its own languages for this hub, and to explore that. Every line of code is written for this hub only (owner decision, 2026-10-15). This section is a first sketch, not a language definition.
+1. One family of three languages that share one core:
+   - a low-level one for the kernel and the parts that touch hardware;
+   - a high-level one for the compositor, the viewer and the other hub programs;
+   - a small specification language, where a rule is written down before the code (for example "input is delayed at most 1 ms").
+2. Two properties are built into all three:
+   - Every function carries a proven worst-case running time, so the time slots in 3.4.1 are guarantees and not hopes.
+   - The compiler produces a proof together with the program, and a small checker program verifies it. This idea is called proof-carrying code (BELIEVED: it dates from the late 1990s; no source read for this document). Only the checker needs to be trusted. Its size is a target to be set, not a known number.
+3. Proofs are required for the kernel, the storage layer and the supervisor (3.4). The other programs get strong tests. This matches target 2, which already asks for machine-checked proofs that no hub program crashes on what a node sends.
+4. What a proof does not cover (unsolved, said plainly):
+   - A proof shows that code matches its written rule. If the rule is wrong, the program is perfect and does the wrong thing. The check plan therefore tests the rules too, not only the code.
+   - The checker, the hardware and the rules are the trusted base. They cannot be proven by themselves.
+   - A function that waits on real hardware (the GPU, the SSD) cannot have its waiting time proven. A part is proven for its own work. The waits are budgeted separately and measured.
+   - Whether such a language can be designed so that the proofs stay small enough to check: UNKNOWN. Languages and proof tools of this kind exist today, but this document has not read their results.
+5. The language family does not replace the real build's open choice among Rust, Ada and Zig for one part (SOURCE: HUB-OS.md); in this track that choice does not arise.
+
+### 3.4 The base system (owner decisions, 2026-10-15)
+Scope: boot, kernel, storage and the first program that supervises the rest. Drivers are not designed here; which are needed is UNKNOWN until the parts are chosen in December.
+
+#### 3.4.1 The kernel
+1. Isolation by proof, not by hardware walls. Each part is written in the family of 3.3, and the compiler proves that it cannot touch another part's memory. This removes the cost of passing messages between walled-off parts. A failed part is still restarted on its own. BELIEVED: Microsoft's Singularity research system worked in this spirit; the seL4 kernel is the usual example of the wall-based way. Neither was read for this document.
+2. Nothing is discovered at boot. The hardware is fixed, so the kernel is built for exactly these parts: no code for hardware the owner does not have, and no loading of parts while running. The one event it must handle is the projector being switched off and on (target 5).
+3. Time and memory bandwidth are planned at build time. Each part gets a CPU time slot and a share of memory bandwidth declared in advance. For example, input has a slot that nothing can take, so a flood of window pictures cannot delay a key press. Why: it is a direct way to meet target 10 (at most 1 ms added) and target 23 (20 windows at once). Check: a full-load run with timestamps on input, as in the check plan.
+4. One hardware wall stays, because proofs cannot cover vendor firmware. The GPU's firmware can write into memory by itself, so the design walls it off with the IOMMU, a chip feature that limits which memory a device may touch. BELIEVED: the planned CPU family has an IOMMU. UNKNOWN: whether the chosen board enables it, until December.
+5. What it replaces from the real build: the upstream Linux kernel with its drivers. What is better: no code for parts the hub does not have; guaranteed time slots instead of a general scheduler. Both are targets, not measurements.
+6. Unsolved: how much planned slots cost when the load is lighter than planned (idle waste); whether the proofs of the time slots survive the real memory system's variation (UNKNOWN until measured on the real board).
+
+#### 3.4.2 Storage: a typed object store, not a file system
+1. The operating system itself is one sealed, signed image in two slots (A/B), mapped directly with no file lookup. This keeps the real build's rule that a machine refuses an image the owner has not signed (SOURCE: HUB-OS.md). HUB-OS.md also says the system is copied into RAM at start (SOURCE, read 2026-10-14); whether this design copies it is not decided here.
+2. Settings, window layouts, mixer settings and clipboard history are records, not files. There are no paths and no folders. Each program declares the shape of what it stores, and the store checks every write against that shape.
+3. Every change is committed all or nothing, and every block carries a checksum. An interrupted save leaves either the old state or the new state, never a mix. This is the design for target 7 (0 settings lost in 200 forced resets).
+4. Old versions of settings and layouts are kept, because the data is small. How small: UNKNOWN until the hub's data is sized.
+5. Unsolved, said plainly: the SSD's own firmware decides when a write is really stored. The design relies on the SSD honoring the flush command (the command that forces data to be stored). Whether the chosen SSD does: UNKNOWN until it is chosen, and the check plan has a test for it. The disk-death case (target 6) is handled by the supervisor and the alert, not by this layer.
+6. What it replaces from the real build: a Linux file system and its tools. What is better: a record that is checked against its declared shape cannot be half-written or malformed; this is a target, not a measurement.
+
+#### 3.4.3 The supervisor (the first program, the "init")
+1. A tiny supervisor, proven correct. It is the first program to run and the one that never restarts. It starts the other parts, watches them, and restarts any that fail, with a limit so that a part that keeps failing is stopped and an alert is raised (the same idea as the real build's restart limit of 5 restarts in 60 s; SOURCE: docs/proposals/init-comparison-run.md line 1021 in Isolati0n/HubOS at ab1047a, read 2026-10-15).
+2. Every part is crash-only: there is no clean shutdown path, and starting up is the same as recovering from a crash. BELIEVED: this idea has been published under the name "crash-only software" (about 2003; not read for this document).
+3. The boot order is worked out at build time and stored as a fixed plan, so nothing is decided while booting. The time to boot is set by firmware and hardware and is measured, not targeted (section 4).
+4. A hardware watchdog is the last resort: a chip timer that resets the machine if the supervisor stops checking in. BELIEVED: most boards have one. UNKNOWN for the chosen board until December. Target 7 already counts resets from the watchdog.
+5. Deferred to the hardware stage: a warm standby compositor, a second copy holding the same state that takes over within one refresh (1000 / 60 = 16.7 ms, arithmetic). It would help targets 4 and 5. UNKNOWN: whether a second compositor fits in GPU memory and bandwidth, and what it does to target 25. Not part of the first design.
+6. What it replaces from the real build: s6 with s6-rc and a separate watcher (SOURCE: HUB-OS.md). What is better: one proven program instead of several, and a plan fixed at build time. A target, not a measurement.
+
 ## 4. What hardware and vendor firmware fix
 - Memory: two channels, DDR5-5200, theoretical peak 83.2 GB/s (SOURCE: Thomas-Krenn, see target 23). Real sustained speed is lower (BELIEVED).
 - The link between the GPU and memory (PCIe), and the GPU's own memory: UNKNOWN until the parts are chosen. The design keeps picture traffic at about 2 GB/s so that it fits any likely link (BELIEVED).
 - GPU reset time, projector sync time and board start-up time are set by firmware and hardware. They are measured, not targeted (targets 5 and 18).
 - Projector lag: December.
+- The GPU's firmware can write into memory on its own; the design walls it off with the IOMMU if the board allows it (3.4.1). UNKNOWN until December.
+- The SSD's firmware decides when written data is really stored; the design depends on it honoring the flush command (3.4.2). UNKNOWN until the SSD is chosen.
+- Whether the board has a hardware watchdog (3.4.3): UNKNOWN until December.
 
 ## 5. Unsolved or not decided yet
 - Node-side cost of scaling a 4K picture: UNKNOWN until the node hardware is chosen.
@@ -104,16 +151,25 @@ What the real build measured about pausing (TESTED there, at 1280x720 on loopbac
 - The project file calls the hub's GPU "discrete AMD"; HUB-OS.md on main does not say discrete. Check in December. A discrete GPU adds a real PCIe link and its own memory.
 - Whether the compositor's zoom should magnify: UNKNOWN until text on the projector can be judged (December).
 - No clock-serving target: the owner decided against it. Phone page and shared phone sessions: dropped from this track.
-- Not designed yet: the base system (boot, kernel, drivers, init, file system), what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance.
+- The language family (3.3): whether proofs stay small enough to check; the size of the trusted checker.
+- Planned time slots: idle waste, and whether proofs survive the real memory system (3.4.1).
+- Drivers: not designed (owner decision, 2026-10-15). Which are needed: UNKNOWN until December.
+- Not designed yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance.
 
-## 6. Check plan (compositor and picture path)
+## 6. Check plan (compositor, picture path and base system)
 - Per-window byte counters on the hub in a full-load run (20 windows changing, the rest hidden): incoming traffic at most 1.1 x the screen's pixels per second (target 25).
 - Time from "window becomes visible" to "fresh picture shown" at 4K, worst of 1,000 (target 9). Result that proves the design wrong: more than 33 ms for an open window.
 - Node scaling cost: measure each node's load while it sends scaled copies at 60 Hz. Result that proves the design wrong: a node cannot keep 60 Hz while doing its own work.
 - Fault injection (targets 3 to 5): kill and freeze hub programs, force GPU resets, switch the projector off and on.
+- Time slots (3.4.1): in a 24-hour full-load run, log every key, click and pointer move at arrival, hand-off and screen flip. Result that proves the design wrong: any added delay above 1 ms (target 10) caused by another part using input's slot.
+- Isolation by proof (3.4.1): attack the checker. Feed it deliberately wrong programs and wrong proofs. Result that proves the design wrong: the checker accepts one.
+- Rules versus code (3.3): for each written rule, a test written by someone who has not seen the code, run against the built system. Result that proves the design wrong: the code matches its rule and the test still fails.
+- Interrupted save (3.4.2, target 7): 200 forced resets at random moments during saves. Result that proves the design wrong: one lost or corrupted setting.
+- SSD flush (3.4.2): cut the SSD's link right after a flush completes, 1,000 times. Result that proves the design wrong: any record that the store reported as saved is missing afterwards.
+- Supervisor (3.4.3): stop the supervisor's check-ins and measure the time to the watchdog reset; kill each part 100 times and check the restart limit stops a part that fails 5 times in 60 s. Result that proves the design wrong: a reboot without a watchdog cause, or a part restarted beyond the limit.
 
 ## 7. Differences from the real build, in plain words
 - The real build never pauses or scales windows (owner decision 2026-10-05, because the network is free). This design does both, because the limit that matters is the hub's memory, not the network. The scaled-copy request is new and is not in the real build's protocol.
 - The real build patches a young compositor and plans restart-and-restore for its crashes (SOURCE: HUB-OS.md). This design assumes a rebuilt, defect-free compositor, and still keeps recovery for hardware events.
 - The real build asks every window for full-size pictures all the time. This design asks only for what is shown.
-- The real build keeps the upstream Linux kernel, built for the hub, and uses s6 as its init (SOURCE: HUB-OS.md "Core principles" and its change log entry of 2026-10-13, read 2026-10-14). This design writes the kernel, drivers, init and file system from scratch for the hub (owner decision, 2026-10-14). The details come with the base-system design.
+- The real build keeps the upstream Linux kernel, built for the hub, and uses s6 as its init (SOURCE: HUB-OS.md "Core principles" and its change log entry of 2026-10-13, read 2026-10-14). This design writes the kernel, drivers, init and file system from scratch for the hub (owner decision, 2026-10-14). In sections 3.3 and 3.4: one language family with proofs instead of Rust, Ada or Zig and Linux's C; isolation by proof instead of by hardware walls; build-time time slots instead of a general scheduler; a typed object store instead of a file system; one proven supervisor instead of s6 with s6-rc and a watcher. Drivers: not designed yet. Every one of these is a design target, not a measurement.
