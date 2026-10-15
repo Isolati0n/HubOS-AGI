@@ -1,6 +1,6 @@
 # Hub: target list and design (design in progress)
 
-AGI premise, not buildable today. Machine: hub. Date: 2026-10-14. Status: targets 1 to 24 approved by the owner on 2026-10-14; target 25 added and approved the same day; design in progress (sections 3.0 to 3.4 written, the rest not yet). Track: theorycraft (project file HUB-OS-AGI.md). The real build's source of truth stays HUB-OS.md on main; nothing here changes it.
+AGI premise, not buildable today. Machine: hub. Date: 2026-10-14. Status: targets 1 to 24 approved by the owner on 2026-10-14; target 25 added and approved the same day; design in progress (sections 3.0 to 3.5 written, the rest not yet). Track: theorycraft (project file HUB-OS-AGI.md). The real build's source of truth stays HUB-OS.md on main; nothing here changes it.
 
 Labels: TESTED = a command and its output. SOURCE = a link or file and date. BELIEVED = not checked. UNKNOWN = not established. Almost every number below is a target, not a measurement.
 
@@ -63,7 +63,7 @@ Scale
 
 ## Design (in progress)
 
-Written so far: 3.0 scope, 3.1 the compositor, 3.2 the picture path, 3.3 the languages and 3.4 the base system (kernel, storage, supervisor). Not written yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance. Drivers are not designed (owner decision, 2026-10-15): they depend on parts bought in December. Each part is added after the owner has answered its questions.
+Written so far: 3.0 scope, 3.1 the compositor, 3.2 the picture path, 3.3 the languages, 3.4 the base system (kernel, storage, supervisor) and 3.5 other designs considered. Not written yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance. Drivers are not designed (owner decision, 2026-10-15): they depend on parts bought in December. Each part is added after the owner has answered its questions.
 
 ### 3.0 Scope (owner decision, 2026-10-14)
 - Every layer of the hub's software is from scratch and purpose-built for this hub, written by AGI: the kernel, the drivers, the init system, the file system, the compositor (3.1), the display protocol (3.2) and the programs on top. Nothing is kept from the real build's choices (the upstream Linux kernel, the s6 init) unless a later section says so and gives the reason.
@@ -133,6 +133,23 @@ Scope: boot, kernel, storage and the first program that supervises the rest. Dri
 5. Deferred to the hardware stage: a warm standby compositor, a second copy holding the same state that takes over within one refresh (1000 / 60 = 16.7 ms, arithmetic). It would help targets 4 and 5. UNKNOWN: whether a second compositor fits in GPU memory and bandwidth, and what it does to target 25. Not part of the first design.
 6. What it replaces from the real build: s6 with s6-rc and a separate watcher (SOURCE: HUB-OS.md). What is better: one proven program instead of several, and a plan fixed at build time. A target, not a measurement.
 
+### 3.5 Other designs considered (2026-10-15)
+Two other AIs (Grok and DeepSeek) were each given the machine's job, the fixed limits and the targets, but not this document, and each designed a base system on its own. Their texts are the owner's copies and are not kept in this repository. Below is the manager's review. Their claims about outside systems were not checked against sources.
+1. What all three designs share: a signed A/B system image; an all-or-nothing, checksummed commit for small changing data; a tiny supervisor with a restart limit; a plan fixed at build time; proofs for the core only. Agreement between AIs is not evidence that the shape is right; only the checks in section 6 are.
+2. Where they differ: isolation. Grok uses separate address spaces. DeepSeek uses one address space where a part only gets memory through ports. This document (3.4.1) uses isolation by proof plus an IOMMU wall around the GPU. The cost of each: UNKNOWN until measured on the board. The check is the full-load run for targets 10 and 23.
+3. Flaws found in the other two (arithmetic re-run by the manager; the rest derived from their own text, not tested):
+   - Grok: scrubbing 32 to 64 GB of ECC memory every 100 ms needs 0.38 to 0.77 s at the 83.2 GB/s peak, so it cannot work as written (scrubbing is normally done by the memory controller; BELIEVED, not checked). Its 50 microsecond address-space switch times 23 parts is 1.15 ms, more than its 1 ms cycle. A polled 1 ms timer can add up to 1 ms to input, which uses the whole of target 10. Dropping the oldest entry from a full ring is wrong for input and sound. Nothing watches its cycle engine, and it uses no hardware watchdog.
+   - DeepSeek: it assumes an owner-burnable one-time fuse and a monotonic counter; both are UNKNOWN on the chosen hardware. It calls itself a single address space but moves pages between address spaces. Its input parts run in the 60 Hz frame schedule, so input can wait up to 16.7 ms. Its clock follows the projector's refresh, but the projector can be switched off (target 5). Its watchdog waits 100 frames of 16.6 ms, which is 1.66 s, more than the 1 s of target 4. It used none of the TESTED, SOURCE, BELIEVED or UNKNOWN labels.
+   - Both: dropped input events leave stuck keys (target 11) unless the key state is resynchronised afterwards. Neither deals with the picture-memory limit of 3.2.
+4. Ideas to add to 3.4 later (not added yet; each needs the owner's OK when written in):
+   - A boot design: a small loader that verifies the signed image before it runs, with protection against going back to an older image. Where a counter for that lives: UNKNOWN.
+   - A staged watchdog: reset the GPU and display path first, the whole machine only if that fails twice.
+   - Four device contracts that any driver must meet (display, input, sound, network): never block, count what is dropped, whole frames in order.
+   - A "failed" tile for a part that is stopped by the restart limit, in line with target 3's stale marker.
+   - A crash record holding the last 16 KB of the dead part's ring and its program counter.
+   - A rule that repairs key state after dropped input events.
+5. Questions for a red team (a hostile review): the cost of proof-based isolation against address spaces; what the proof checker has to be trusted for; whether a static schedule can accommodate a real GPU's timing; whether the message rings can deadlock.
+
 ## 4. What hardware and vendor firmware fix
 - Memory: two channels, DDR5-5200, theoretical peak 83.2 GB/s (SOURCE: Thomas-Krenn, see target 23). Real sustained speed is lower (BELIEVED).
 - The link between the GPU and memory (PCIe), and the GPU's own memory: UNKNOWN until the parts are chosen. The design keeps picture traffic at about 2 GB/s so that it fits any likely link (BELIEVED).
@@ -141,6 +158,7 @@ Scope: boot, kernel, storage and the first program that supervises the rest. Dri
 - The GPU's firmware can write into memory on its own; the design walls it off with the IOMMU if the board allows it (3.4.1). UNKNOWN until December.
 - The SSD's firmware decides when written data is really stored; the design depends on it honoring the flush command (3.4.2). UNKNOWN until the SSD is chosen.
 - Whether the board has a hardware watchdog (3.4.3): UNKNOWN until December.
+- Custom hardware: the board, RAM and GPU are not redesigned in this track (owner decision, 2026-10-15). A separate, later "custom hardware wish list" may follow the software designs. It would assume real chip factories and real physics, and each item would name the number that fails today.
 
 ## 5. Unsolved or not decided yet
 - Node-side cost of scaling a 4K picture: UNKNOWN until the node hardware is chosen.
@@ -152,6 +170,7 @@ Scope: boot, kernel, storage and the first program that supervises the rest. Dri
 - Whether the compositor's zoom should magnify: UNKNOWN until text on the projector can be judged (December).
 - No clock-serving target: the owner decided against it. Phone page and shared phone sessions: dropped from this track.
 - The language family (3.3): whether proofs stay small enough to check; the size of the trusted checker.
+- Memory capacity at the 5000-window stretch: one last 4K picture per window is 33.2 MB, so 5000 windows are 166 GB (arithmetic). Target 23 caps RAM at 50% and the board's installed RAM is UNKNOWN. How hidden windows' last pictures are kept (for example, compressed) is not designed.
 - Planned time slots: idle waste, and whether proofs survive the real memory system (3.4.1).
 - Drivers: not designed (owner decision, 2026-10-15). Which are needed: UNKNOWN until December.
 - Not designed yet: what runs on the hub and how it recovers, input, sound, clipboard, updates and rollback, maintenance.
